@@ -1,0 +1,6 @@
+fprime_fpp_version.py
+__SHADOW__
+dist
+.idea
+fprime_fpp.egg-info
+__pycache__
