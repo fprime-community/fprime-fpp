@@ -7,14 +7,12 @@
 # for the "fprime" package to specify a specific dependency on FPP tools versions
 ####
 import shutil
-
 from pathlib import Path
 from setuptools import setup
 from setuptools.command.sdist import sdist
 from setuptools.command.install import install
 
-from fprime_fpp_install import clean_install_fpp
-from fprime_fpp_version import __VERSION__
+from fprime_fpp_install import clean_install_fpp, __PACKAGE_VERSION__
 
 SHADOW_DIR=Path("__SHADOW__")
 SHADOW_CACHE=None
@@ -58,11 +56,15 @@ with clean_install_fpp() as lazy_executables:
 
         During the 'sdist' stage we want to download an expected FPP tarball and understand what is included inside
         (in terms of files). Then create a shadow set of 0-byte files as placeholders in the distribution. The install
-        stage (below) will handle the work of replacing the shadow placeholders with the actual platform-specific binaries.
+        stage (below) will handle the work of replacing the shadow placeholders with the actual platform-specific
+        binaries.
+
+        'sdist' is also the only case where the environment variable is required to be set for building these tools. In
+        other cases it will be set by fprime and will default to package when not set. This here we check for that
+        variable and error if not set.
         """
         def run(self):
             """ sdist package run implementation """
-
             for shadow, _ in cache_shadows():
                 shadow.touch()
             sdist.run(self)
@@ -76,12 +78,12 @@ with clean_install_fpp() as lazy_executables:
 
     setup(
         name="fprime-fpp",
-        version=__VERSION__,
+        version=__PACKAGE_VERSION__,
         license="Apache 2.0 License",
         description="FPP distribution package",
         long_description="""
     Package used to deploy the FPP tool suite in the same manner as all other tools. FPP will be installed in the user's
-    virtual environment or python distrbution alongside other tools being user (e.g. fprime-util).
+    virtual environment or python distribution alongside other tools being user (e.g. fprime-util).
         """,
         url="https://github.com/nasa/fprime",
         keywords=["fpp", "fprime", "embedded", "nasa"],
@@ -97,8 +99,8 @@ with clean_install_fpp() as lazy_executables:
             "Programming Language :: Python :: 3",
         ],
         python_requires=">=3.6",
-        install_requires=["setuptools_scm==6.0.1", "urllib3==1.26.5"],
-        setup_requires=["setuptools_scm==6.0.1", "urllib3==1.26.5"],
+        install_requires=["setuptools_scm==6.0.1"],
+        setup_requires=["setuptools_scm==6.0.1"],
         data_files=[("bin", cache_shadows(shadow_string=True))],
         py_modules=["fprime_fpp_install", "fprime_fpp_version"],
         cmdclass={"sdist": FppSdist, "install": FppInstall}
