@@ -12,7 +12,8 @@ from setuptools import setup
 from setuptools.command.sdist import sdist
 from setuptools.command.install import install
 
-from fprime_fpp_install import clean_install_fpp, __PACKAGE_VERSION__
+from fprime_fpp_install import clean_install_fpp, clean_at_exit, PACKAGE_VERSION, WORKING_DIR
+
 
 SHADOW_DIR=Path("__SHADOW__")
 SHADOW_CACHE=None
@@ -35,7 +36,7 @@ def make_shadows(shadow_dir, executables):
 
 
 with clean_install_fpp() as lazy_executables:
-    def cache_shadows(shadow_string=False):
+    def cache_shadows(name_only=False):
         """ Caches the output of the shadow generator
 
         Since the shadow data is used multiple times and incurs a very expensive call to the Github download/cloning code,
@@ -48,8 +49,9 @@ with clean_install_fpp() as lazy_executables:
         new_cache = []
         for shadow_pair in iterable:
             new_cache.append(shadow_pair)
-            yield str(shadow_pair[0]) if shadow_string else shadow_pair
+            yield shadow_pair[0] if name_only else shadow_pair
         SHADOW_CACHE = new_cache
+
 
     class FppSdist(sdist):
         """ Command to run at 'sdist' stage
@@ -72,13 +74,14 @@ with clean_install_fpp() as lazy_executables:
     class FppInstall(install):
         def run(self):
             """ install scripts for giles """
+            clean_at_exit(WORKING_DIR)
             for shadow, executable in cache_shadows():
                 shutil.copy(executable, shadow)
             install.run(self)
 
     setup(
         name="fprime-fpp",
-        version=__PACKAGE_VERSION__,
+        version=PACKAGE_VERSION,
         license="Apache 2.0 License",
         description="FPP distribution package",
         long_description="""
@@ -99,9 +102,7 @@ with clean_install_fpp() as lazy_executables:
             "Programming Language :: Python :: 3",
         ],
         python_requires=">=3.6",
-        install_requires=["setuptools_scm==6.0.1"],
-        setup_requires=["setuptools_scm==6.0.1"],
-        data_files=[("bin", cache_shadows(shadow_string=True))],
-        py_modules=["fprime_fpp_install", "fprime_fpp_version"],
+        data_files=[("bin", cache_shadows(name_only=True))],
+        py_modules=["fprime_fpp_install"],
         cmdclass={"sdist": FppSdist, "install": FppInstall}
     )

@@ -4,8 +4,10 @@ Installs the FPP tool suite based on the version of this installer package. It w
 variable to pull up previously downloaded items for users that wish to install offline.
 """
 import atexit
+import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -19,57 +21,104 @@ from typing import Iterable
 from contextlib import contextmanager
 
 
-VERSION_FILE = "fprime_fpp_version.py"
+TEMPORARY_VERSION_FILE = Path(tempfile.gettempdir()) / "fprime_versions.json"
 FPP_TOOLS_VARIABLE = "FPP_TOOLS_VERSION"
 
 
-def clean_version_file():
-    """ Clean up the version file iff it is created """
+def clean_at_exit(file_or_directory):
+    """ Register file for cleanup at exit """
+
+    def clean_version_file(path):
+        """ Clean up the version file iff it is created """
+        print(f"-- INFO  -- Removing: {path}")
+        shutil.rmtree(path, ignore_errors=True)
+    atexit.register(clean_version_file, file_or_directory)
+
+
+# Force the temporary version file to be removed
+clean_at_exit(TEMPORARY_VERSION_FILE)
+
+
+def read_version_from_temp(file: Path, fallback=None, safe=False):
+    """ Reads the versioning information from temporary directory
+
+    When an installation of the fprime package runs, it will set the versioning information in a temporary file. This
+    file is read and processed to determine the FPP_TOOLS_VERSION to install. It is associated with a PPID file to
+    ensure that this file was created within the same parent process tree. This ensures that it is valid.  If the PPID
+    field is not set, it will assume the file is correct.
+    """
     try:
-        os.remove(VERSION_FILE)
+        with open(file, "r") as file_handle:
+            versions = json.load(file_handle)
+        version = versions[FPP_TOOLS_VARIABLE]
+        if safe or versions["setup_ppid"] == os.getppid():
+            print(f"-- INFO  -- Found version {version} in {file}, overriding {fallback}")
+            return version
+        print(f"-- WARN  -- {file} contained non-matching parent process id, skipping as version source")
     except OSError:
-        pass
+        print(f"-- WARN  -- Failed to find {file}, skipping as version source")
+    except KeyError:
+        print(f"-- WARN  -- {file} did not define { FPP_TOOLS_VARIABLE }, skipping as version source")
+    return fallback
 
 
 def setup_version():
-    """ Setup a version python file
+    """ Setup the version information for the fpp tools that will be installed
 
-    In order to install from PIP directly, without a dependence on setuptools_scm, we need to publish as part of the
-    package a version file that will carry the version of the package itself. It should also carry the default FPP tools
-    version for the case when the package is installed directly via `pip install fprime-fpp`.
+    There are three cases for installing fpp-tools that we care about: installing via the fprime package, installing the
+    PIP package locally, and building the sdist package for the PIP repository. The priority of these cases is in-order
+    from hardest to trigger to easiest:
 
-    This code will fail with an import error when the writen file is published
+    1. fprime package, only triggered when PIP installing fprime. Sources version from temporary file.
+    2. 'sdist', must read from environment variable
+    3. Local install, must read from environment variable
+
+    The code reads these cases from 3-1 (reverse order) overriding at each step. This effectively means the version
+    derived from 'fprime' when it is installing always takes precedence. Then the user's supplied environment variable
+    and then only takes the default information from the package itself. It is an error if no version is found.
+
+    The code also creates the version file, for shipping as the default with the package
     """
-    try:
-        import setuptools_scm
-        environment_fpp_version = os.environ[FPP_TOOLS_VARIABLE]
-        atexit.register(clean_version_file)
-        with open(VERSION_FILE, "w") as file_handle:
-            scm_version = setuptools_scm.get_version('.', relative_to=__file__)
-            file_handle.write(f"__VERSION__ = '{ scm_version }'\n")
-            file_handle.write(f"__FPP_TOOLS_DEFAULT_VERSION__ = '{ environment_fpp_version }'\n")
-    except ImportError:
-        print("[ERROR] 'setuptools_scm' package required for source distribution build ")
+    version = os.environ.get(FPP_TOOLS_VARIABLE, None)  # 'sdist' and local from environment file
+    version = read_version_from_temp(TEMPORARY_VERSION_FILE, version)  # fprime package install, read checking ppid
+
+    # Check for the case when the version was not found
+    if version is None:
+        print(f"[ERROR] 'sdist' builds and local installations, must set { FPP_TOOLS_VARIABLE }environment variable")
         sys.exit(1)
-    except KeyError as exception:
-        print(f"[ERROR] Environment variable {exception} must be set")
-        sys.exit(1)
+    return version
 
 
-# First attempt to import the version file. This will exist in the packaged version, but not in locally installed or
-# built code. Locally built or installed versions will generate the file but also need setuptools_scm and the
-# FPP_TOOLS_VERSION environment variable.
-try:
-    from fprime_fpp_version import __VERSION__, __FPP_TOOLS_DEFAULT_VERSION__
-except ImportError:
-    setup_version()
-    from fprime_fpp_version import __VERSION__, __FPP_TOOLS_DEFAULT_VERSION__
-__PACKAGE_VERSION__ = __VERSION__
-__FPP_TOOLS_VERSION__ = os.environ.get(FPP_TOOLS_VARIABLE, __FPP_TOOLS_DEFAULT_VERSION__)
+def get_package_version(tools_version):
+    """ Package version from the tool version"""
+    version_match_string = r"(v\d+\.\d+\.\d+)"
+    hash_match_string = r"([a-fA-F0-9]{8,40}+)"
+    full_version_string = fr"{ version_match_string }-(\d+)-g{ hash_match_string }"
+
+    hash_matcher = re.compile(hash_match_string)
+    full_version_matcher = re.compile(full_version_string)
+
+    # Base settings
+    version = "v0.0.0"
+    commits = "999"
+    hash = "00000000"
+
+    # Exact match of a version string, should be returned right back:
+    if re.match(fr"^{ version_match_string }$", tools_version):
+        return tools_version
+    elif hash_matcher.match(tools_version):
+        hash = tools_version[:8]
+    elif full_version_matcher.match(tools_version):
+        matched = full_version_matcher.match(tools_version)
+        version = matched.group(1)
+        commits = matched.group(2)
+        hash = matched.group(3)[:8]
+    return f"{ version }.dev{ commits }+g{ hash }"
 
 
-# Constants for easy configuration
-WORKING_DIR = "__FPP_WORKING_DIR__"
+__FPP_TOOLS_VERSION__ = setup_version()
+PACKAGE_VERSION = get_package_version(__FPP_TOOLS_VERSION__)
+WORKING_DIR = Path(tempfile.gettempdir()) / "__FPP_WORKING_DIR__"
 FPP_ARTIFACT_PREFIX = "native-fpp"
 FPP_COMPRESSION_EXT = ".tar.gz"
 GITHUB_URL = os.environ.get("FPP_TOOLS_REPO", "https://github.com/fprime-community/fpp")
@@ -133,10 +182,9 @@ def prepare_cache_dir(cache_directory: Path, version: str) -> Path:
     return output_dir
 
 
-def install_fpp(working_dir: Path) -> Iterable[Path]:
+def install_fpp(working_dir: Path) -> Path:
     """ Installs FPP of the specified version """
     version = __FPP_TOOLS_VERSION__
-
     cache_directory = Path(os.environ.get("FPP_DOWNLOAD_CACHE", working_dir))
 
     # Put everything in the current working directory
@@ -148,9 +196,9 @@ def install_fpp(working_dir: Path) -> Iterable[Path]:
         # Check cache/download directory for artifact.
         tools_install_directory = prepare_cache_dir(cache_directory, version)
         if not tools_install_directory:
-            print("-- WARN  -- Cache directory must supply .tar.gz of tools")
+            print("-- WARN  -- Cached/released tools not found. Falling back to git clone.")
             tools_install_directory = install_fpp_via_git(cache_directory, version)
-        return tools_install_directory.iterdir()
+        return tools_install_directory
 
 
 def install_fpp_via_git(installation_directory: Path, version: str):
@@ -164,6 +212,7 @@ def install_fpp_via_git(installation_directory: Path, version: str):
         installation_directory: directory to install into
         version: FPP tools version to install
     """
+
     tools = ["git", "sh", "java", "sbt"]
     for tool in tools:
         if not shutil.which(tool):
@@ -179,22 +228,28 @@ def install_fpp_via_git(installation_directory: Path, version: str):
             if completed.returncode != 0:
                 print(f"-- ERROR -- Failed to run { ' '.join(step) }")
                 sys.exit(-1)
+
     return installation_directory
+
+
+def iterate_fpp_tools(working_dir: Path) -> Iterable[Path]:
+    """ Iterates through FPP tools """
+    untar_possibility = working_dir / get_artifact_string(__FPP_TOOLS_VERSION__).replace(".tar.gz", "")
+    if not any(os.scandir(working_dir)):
+        working_dir = install_fpp(working_dir)
+    elif untar_possibility.exists() and any(os.scandir(untar_possibility)):
+        working_dir = untar_possibility
+    return working_dir.iterdir()
+
 
 
 @contextmanager
 def clean_install_fpp():
     """ Cleanly installs FPP in subdirectory, cleaning when finished"""
-    origin = os.getcwd()
-    working_dir = Path(origin) / WORKING_DIR
-    working_dir.mkdir(exist_ok=True)
+    WORKING_DIR.mkdir(exist_ok=True)
 
     def lazy_loader():
         """ Prevents the download of FPP items until actually enumerated """
-        for item in install_fpp(working_dir):
+        for item in iterate_fpp_tools(WORKING_DIR):
             yield item
-    try:
-        yield lazy_loader()
-    # When done clean-up that created directory
-    finally:
-        shutil.rmtree(working_dir, ignore_errors=True)
+    yield lazy_loader()
