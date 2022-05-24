@@ -12,15 +12,20 @@ from setuptools import setup
 from setuptools.command.sdist import sdist
 from setuptools.command.install import install
 
-from fprime_fpp_install import clean_install_fpp, clean_at_exit, PACKAGE_VERSION, WORKING_DIR
+from fprime_fpp_install import (
+    clean_install_fpp,
+    clean_at_exit,
+    PACKAGE_VERSION,
+    WORKING_DIR,
+)
 
 
-SHADOW_DIR=Path("__SHADOW__")
-SHADOW_CACHE=None
+SHADOW_DIR = Path("__SHADOW__")
+SHADOW_CACHE = None
 
 
 def make_shadows(shadow_dir, executables):
-    """ Makes shadow copies of the fpp executables
+    """Makes shadow copies of the fpp executables
 
     The PIP sdist package must be aware of the names and paths of installed FPP executables, even though they are
     downloaded during the install phase (on client). Thus this function when run with touch_only creates 0-size file
@@ -36,15 +41,20 @@ def make_shadows(shadow_dir, executables):
 
 
 with clean_install_fpp() as lazy_executables:
+
     def cache_shadows(name_only=False):
-        """ Caches the output of the shadow generator
+        """Caches the output of the shadow generator
 
         Since the shadow data is used multiple times and incurs a very expensive call to the Github download/cloning code,
         the output is cached here and subsequent calls for this data return the cached version. However, this function
         maintains the lazy nature of executables and make_shadows preventing early execution of the expensive calls.
         """
         global SHADOW_CACHE
-        iterable = SHADOW_CACHE if SHADOW_CACHE is not None else make_shadows(SHADOW_DIR, lazy_executables)
+        iterable = (
+            SHADOW_CACHE
+            if SHADOW_CACHE is not None
+            else make_shadows(SHADOW_DIR, lazy_executables)
+        )
 
         new_cache = []
         for shadow_pair in iterable:
@@ -52,9 +62,8 @@ with clean_install_fpp() as lazy_executables:
             yield shadow_pair[0] if name_only else shadow_pair
         SHADOW_CACHE = new_cache
 
-
     class FppSdist(sdist):
-        """ Command to run at 'sdist' stage
+        """Command to run at 'sdist' stage
 
         During the 'sdist' stage we want to download an expected FPP tarball and understand what is included inside
         (in terms of files). Then create a shadow set of 0-byte files as placeholders in the distribution. The install
@@ -65,15 +74,16 @@ with clean_install_fpp() as lazy_executables:
         other cases it will be set by fprime and will default to package when not set. This here we check for that
         variable and error if not set.
         """
+
         def run(self):
-            """ sdist package run implementation """
+            """sdist package run implementation"""
             for shadow, _ in cache_shadows():
                 shadow.touch()
             sdist.run(self)
 
     class FppInstall(install):
         def run(self):
-            """ install scripts for giles """
+            """install scripts for giles"""
             clean_at_exit(WORKING_DIR)
             for shadow, executable in cache_shadows():
                 shutil.copy(executable, shadow)
@@ -104,5 +114,5 @@ with clean_install_fpp() as lazy_executables:
         python_requires=">=3.6",
         data_files=[("bin", cache_shadows(name_only=True))],
         py_modules=["fprime_fpp_install"],
-        cmdclass={"sdist": FppSdist, "install": FppInstall}
+        cmdclass={"sdist": FppSdist, "install": FppInstall},
     )

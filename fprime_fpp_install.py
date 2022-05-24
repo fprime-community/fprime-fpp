@@ -26,12 +26,13 @@ FPP_TOOLS_VARIABLE = "FPP_TOOLS_VERSION"
 
 
 def clean_at_exit(file_or_directory):
-    """ Register file for cleanup at exit """
+    """Register file for cleanup at exit"""
 
     def clean_version_file(path):
-        """ Clean up the version file iff it is created """
+        """Clean up the version file iff it is created"""
         print(f"-- INFO  -- Removing: {path}")
         shutil.rmtree(path, ignore_errors=True)
+
     atexit.register(clean_version_file, file_or_directory)
 
 
@@ -40,7 +41,7 @@ clean_at_exit(TEMPORARY_VERSION_FILE)
 
 
 def read_version_from_temp(file: Path, fallback=None, safe=False):
-    """ Reads the versioning information from temporary directory
+    """Reads the versioning information from temporary directory
 
     When an installation of the fprime package runs, it will set the versioning information in a temporary file. This
     file is read and processed to determine the FPP_TOOLS_VERSION to install. It is associated with a PPID file to
@@ -52,18 +53,24 @@ def read_version_from_temp(file: Path, fallback=None, safe=False):
             versions = json.load(file_handle)
         version = versions[FPP_TOOLS_VARIABLE]
         if safe or versions["setup_ppid"] == os.getppid():
-            print(f"-- INFO  -- Found version {version} in {file}, overriding {fallback}")
+            print(
+                f"-- INFO  -- Found version {version} in {file}, overriding {fallback}"
+            )
             return version
-        print(f"-- WARN  -- {file} contained non-matching parent process id, skipping as version source")
+        print(
+            f"-- WARN  -- {file} contained non-matching parent process id, skipping as version source"
+        )
     except OSError:
         print(f"-- WARN  -- Failed to find {file}, skipping as version source")
     except KeyError:
-        print(f"-- WARN  -- {file} did not define { FPP_TOOLS_VARIABLE }, skipping as version source")
+        print(
+            f"-- WARN  -- {file} did not define { FPP_TOOLS_VARIABLE }, skipping as version source"
+        )
     return fallback
 
 
 def setup_version():
-    """ Setup the version information for the fpp tools that will be installed
+    """Setup the version information for the fpp tools that will be installed
 
     There are three cases for installing fpp-tools that we care about: installing via the fprime package, installing the
     PIP package locally, and building the sdist package for the PIP repository. The priority of these cases is in-order
@@ -79,18 +86,24 @@ def setup_version():
 
     The code also creates the version file, for shipping as the default with the package
     """
-    version = os.environ.get(FPP_TOOLS_VARIABLE, None)  # 'sdist' and local from environment file
-    version = read_version_from_temp(TEMPORARY_VERSION_FILE, version)  # fprime package install, read checking ppid
+    version = os.environ.get(
+        FPP_TOOLS_VARIABLE, None
+    )  # 'sdist' and local from environment file
+    version = read_version_from_temp(
+        TEMPORARY_VERSION_FILE, version
+    )  # fprime package install, read checking ppid
 
     # Check for the case when the version was not found
     if version is None:
-        print(f"[ERROR] 'sdist' builds and local installations, must set { FPP_TOOLS_VARIABLE }environment variable")
+        print(
+            f"[ERROR] 'sdist' builds and local installations, must set { FPP_TOOLS_VARIABLE }environment variable"
+        )
         sys.exit(1)
     return version
 
 
 def get_package_version(tools_version):
-    """ Package version from the tool version"""
+    """Package version from the tool version"""
     version_match_string = r"(v\d+\.\d+\.\d+)"
     hash_match_string = r"([a-fA-F0-9]{8,40}+)"
     full_version_string = fr"{ version_match_string }-(\d+)-g{ hash_match_string }"
@@ -127,7 +140,7 @@ GITHUB_RELEASE_URL = "{GITHUB_URL}/releases/download/{version}/{artifact_string}
 
 @contextmanager
 def safe_chdir(path):
-    """ Safely change directory, returning when done. """
+    """Safely change directory, returning when done."""
     origin = os.getcwd()
     try:
         os.chdir(path)
@@ -137,25 +150,31 @@ def safe_chdir(path):
 
 
 def get_artifact_string(version: str) -> str:
-    """ Gets the platform string for the package. e.g. Darwin-x86_64 """
+    """Gets the platform string for the package. e.g. Darwin-x86_64"""
     return f"{ FPP_ARTIFACT_PREFIX }-{ platform.system() }-{ platform.machine() }{ FPP_COMPRESSION_EXT }"
 
 
 def wget(url: str):
-    """ wget functionality to fetch a URL """
+    """wget functionality to fetch a URL"""
     print(f"-- INFO  -- Fetching FPP tools at { url }", file=sys.stderr)
     try:
         urllib.request.urlretrieve(url, Path(url).name)
     except urllib.error.HTTPError as error:
-        print(f"-- WARN  -- Failed to retrieve { url } with error: { error }", file=sys.stderr)
+        print(
+            f"-- WARN  -- Failed to retrieve { url } with error: { error }",
+            file=sys.stderr,
+        )
         raise
 
 
 def github_release_download(version: str):
-    """ Attempts to get FPP via the FPP release """
+    """Attempts to get FPP via the FPP release"""
     try:
-        release_url = GITHUB_RELEASE_URL.format(GITHUB_URL=GITHUB_URL, version=version,
-                                                artifact_string=get_artifact_string(version))
+        release_url = GITHUB_RELEASE_URL.format(
+            GITHUB_URL=GITHUB_URL,
+            version=version,
+            artifact_string=get_artifact_string(version),
+        )
         wget(release_url)
     except urllib.error.HTTPError as error:
         retry_likely = "404" not in str(error)
@@ -167,7 +186,7 @@ def github_release_download(version: str):
 
 
 def prepare_cache_dir(cache_directory: Path, version: str) -> Path:
-    """ Prepare the cache directory for the installation artifact
+    """Prepare the cache directory for the installation artifact
 
     Returns:
         Path to install if the cache directory is ready, None if not (usually no artifacts available)
@@ -183,7 +202,7 @@ def prepare_cache_dir(cache_directory: Path, version: str) -> Path:
 
 
 def install_fpp(working_dir: Path) -> Path:
-    """ Installs FPP of the specified version """
+    """Installs FPP of the specified version"""
     version = __FPP_TOOLS_VERSION__
     cache_directory = Path(os.environ.get("FPP_DOWNLOAD_CACHE", working_dir))
 
@@ -196,13 +215,15 @@ def install_fpp(working_dir: Path) -> Path:
         # Check cache/download directory for artifact.
         tools_install_directory = prepare_cache_dir(cache_directory, version)
         if not tools_install_directory:
-            print("-- WARN  -- Cached/released tools not found. Falling back to git clone.")
+            print(
+                "-- WARN  -- Cached/released tools not found. Falling back to git clone."
+            )
             tools_install_directory = install_fpp_via_git(cache_directory, version)
         return tools_install_directory
 
 
 def install_fpp_via_git(installation_directory: Path, version: str):
-    """ Installs FPP from git
+    """Installs FPP from git
 
     Should FPP not be available as a published version, this will clone the FPP repo, checkout, and build the FPP tools
     for the given version. This requires the following tools to exist on the system: git, sh, java, and sbt. These tools
@@ -219,9 +240,14 @@ def install_fpp_via_git(installation_directory: Path, version: str):
             print(f"-- ERROR -- {tool} must exist on PATH")
             sys.exit(-1)
     with tempfile.TemporaryDirectory() as build_directory:
-        steps = [["git", "clone", GITHUB_URL, str(build_directory)],
-                 ["git", "checkout", version],
-                 [os.path.join(build_directory, "compiler", "install"), str(installation_directory)]]
+        steps = [
+            ["git", "clone", GITHUB_URL, str(build_directory)],
+            ["git", "checkout", version],
+            [
+                os.path.join(build_directory, "compiler", "install"),
+                str(installation_directory),
+            ],
+        ]
         for step in steps:
             print(f"-- INFO  -- Running { ' '.join(step) }")
             completed = subprocess.run(step, cwd=build_directory)
@@ -233,8 +259,10 @@ def install_fpp_via_git(installation_directory: Path, version: str):
 
 
 def iterate_fpp_tools(working_dir: Path) -> Iterable[Path]:
-    """ Iterates through FPP tools """
-    untar_possibility = working_dir / get_artifact_string(__FPP_TOOLS_VERSION__).replace(".tar.gz", "")
+    """Iterates through FPP tools"""
+    untar_possibility = working_dir / get_artifact_string(
+        __FPP_TOOLS_VERSION__
+    ).replace(".tar.gz", "")
     if not any(os.scandir(working_dir)):
         working_dir = install_fpp(working_dir)
     elif untar_possibility.exists() and any(os.scandir(untar_possibility)):
@@ -242,14 +270,14 @@ def iterate_fpp_tools(working_dir: Path) -> Iterable[Path]:
     return working_dir.iterdir()
 
 
-
 @contextmanager
 def clean_install_fpp():
-    """ Cleanly installs FPP in subdirectory, cleaning when finished"""
+    """Cleanly installs FPP in subdirectory, cleaning when finished"""
     WORKING_DIR.mkdir(exist_ok=True)
 
     def lazy_loader():
-        """ Prevents the download of FPP items until actually enumerated """
+        """Prevents the download of FPP items until actually enumerated"""
         for item in iterate_fpp_tools(WORKING_DIR):
             yield item
+
     yield lazy_loader()
