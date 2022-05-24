@@ -105,7 +105,7 @@ def setup_version():
 def get_package_version(tools_version):
     """Package version from the tool version"""
     version_match_string = r"(v\d+\.\d+\.\d+)"
-    hash_match_string = r"([a-fA-F0-9]{8,40}+)"
+    hash_match_string = r"([a-fA-F0-9]{8,40})"
     full_version_string = fr"{ version_match_string }-(\d+)-g{ hash_match_string }"
 
     hash_matcher = re.compile(hash_match_string)
