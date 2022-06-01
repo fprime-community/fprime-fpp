@@ -136,6 +136,7 @@ FPP_ARTIFACT_PREFIX = "native-fpp"
 FPP_COMPRESSION_EXT = ".tar.gz"
 GITHUB_URL = os.environ.get("FPP_TOOLS_REPO", "https://github.com/fprime-community/fpp")
 GITHUB_RELEASE_URL = "{GITHUB_URL}/releases/download/{version}/{artifact_string}"
+SBT_URL = "https://github.com/sbt/sbt/releases/download/v1.6.2/sbt-1.6.2.tgz"
 
 
 @contextmanager
@@ -234,26 +235,34 @@ def install_fpp_via_git(installation_directory: Path, version: str):
         version: FPP tools version to install
     """
 
-    tools = ["git", "sh", "java", "sbt"]
+    tools = ["git", "sh", "java"]
     for tool in tools:
         if not shutil.which(tool):
             print(f"-- ERROR -- {tool} must exist on PATH")
             sys.exit(-1)
-    with tempfile.TemporaryDirectory() as build_directory:
-        steps = [
-            ["git", "clone", GITHUB_URL, str(build_directory)],
-            ["git", "checkout", version],
-            [
-                os.path.join(build_directory, "compiler", "install"),
-                str(installation_directory),
-            ],
-        ]
-        for step in steps:
-            print(f"-- INFO  -- Running { ' '.join(step) }")
-            completed = subprocess.run(step, cwd=build_directory)
-            if completed.returncode != 0:
-                print(f"-- ERROR -- Failed to run { ' '.join(step) }")
-                sys.exit(-1)
+    with tempfile.TemporaryDirectory() as tools_directory:
+        os.chdir(tools_directory)
+        wget(SBT_URL)
+        with tarfile.open(os.path.basename(SBT_URL)) as archive:
+            archive.extractall(".")
+        sbt_path = Path(tools_directory) / "sbt" / "bin"
+        subprocess_environment = os.environ.copy()
+        subprocess_environment["PATH"] = f"{ sbt_path }:{ os.environ.get('PATH') }"
+        with tempfile.TemporaryDirectory() as build_directory:
+            steps = [
+                ["git", "clone", GITHUB_URL, str(build_directory)],
+                ["git", "checkout", version],
+                [
+                    os.path.join(build_directory, "compiler", "install"),
+                    str(installation_directory),
+                ],
+            ]
+            for step in steps:
+                print(f"-- INFO  -- Running { ' '.join(step) }")
+                completed = subprocess.run(step, cwd=build_directory, env=subprocess_environment)
+                if completed.returncode != 0:
+                    print(f"-- ERROR -- Failed to run { ' '.join(step) }")
+                    sys.exit(-1)
 
     return installation_directory
 
