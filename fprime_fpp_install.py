@@ -179,9 +179,9 @@ def github_release_download(version: str):
         wget(release_url)
     except urllib.error.HTTPError as error:
         retry_likely = "404" not in str(error)
-        retry_error = f"Retrying will likely resolve the problem."
         # Check if this is a real error or not available error
         if retry_likely:
+            retry_error = "Retrying will likely resolve the problem."
             print(f"-- INFO  -- { retry_error }", file=sys.stderr)
             sys.exit(-1)
 
