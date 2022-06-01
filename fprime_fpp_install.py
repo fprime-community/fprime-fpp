@@ -286,7 +286,6 @@ def clean_install_fpp():
 
     def lazy_loader():
         """Prevents the download of FPP items until actually enumerated"""
-        for item in iterate_fpp_tools(WORKING_DIR):
-            yield item
+        yield from iterate_fpp_tools(WORKING_DIR)
 
     yield lazy_loader()
