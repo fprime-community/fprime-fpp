@@ -123,9 +123,9 @@ def get_package_version(tools_version):
         hash = tools_version[:8]
     elif full_version_matcher.match(tools_version):
         matched = full_version_matcher.match(tools_version)
-        version = matched.group(1)
-        commits = matched.group(2)
-        hash = matched.group(3)[:8]
+        version = matched[1]
+        commits = matched[2]
+        hash = matched[3][:8]
     return f"{ version }.dev{ commits }+g{ hash }"
 
 
